@@ -1,0 +1,26 @@
+# 构建产物
+backend/target/
+frontend/dist/
+frontend/node_modules/
+backend/src/main/resources/static/
+
+# 本地敏感配置（真实数据库密码、API Key 等请放这里，不要提交）
+backend/src/main/resources/application-local.yml
+.env
+.env.local
+
+# IDE / 编辑器
+.idea/
+.vscode/
+.trae/
+*.iml
+
+# 系统文件与日志
+.DS_Store
+Thumbs.db
+*.log
+logs/
+
+# 截图与临时上传
+.screenshots/
+.uploads/

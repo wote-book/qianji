@@ -1,0 +1,60 @@
+server:
+  port: 8080
+  servlet:
+    session:
+      timeout: 30m
+      cookie:
+        http-only: true
+        same-site: lax
+
+spring:
+  application:
+    name: finance
+  profiles:
+    active: dev
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd HH:mm:ss
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 10MB
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+app:
+  seed:
+    enabled: true
+  demo:
+    enabled: false
+  brief:
+    timeout-ms: 15000
+    force-rule: false
+    max-chars: 400
+    model: agnes-3.0-flash
+    api-base: https://api.agnes-ai.cn/v1
+    api-key: ${AGNES_API_KEY:}
+    prompt: |
+      你是用户的个人财务助理。用户消息会给出一个 JSON 统计摘要，字段含义：
+      month 本月月份；income/expense/net 本月收入、支出、结余；savingsRate 储蓄率（%）；
+      prevMonth 上月的收入、支出、结余；expenseChangeRate/incomeChangeRate 本月支出、收入相对上月的百分比变化；
+      today 今天的收入、支出、昨天的支出，以及今天支出相对昨天的百分比变化；
+      topCategories 本月支出前三的分类、金额与占比；budgetRatio/budgetLevel 预算执行率与状态（GREEN/YELLOW/RED）；
+      goalCount/goalAvgPercent 理财目标数量与平均完成度；anomalyCount 异常大额支出笔数。
+      请据此写一段约 260-320 字的财务简报，分四个自然段，不要小标题、不要列表符号、不要 emoji：
+      1) 本月收支与储蓄：说明本月收入、支出、结余（也就是这个月存下了多少钱）和储蓄率，并与上月支出、收入对比，明确指出支出是增加还是减少、主要由哪些分类带来；结余为正时先用一句具体、真诚的话肯定用户（点出存下的金额或储蓄率），再补充注意事项，不要只用「但是」转折削弱鼓励；结余为负时温和提醒。
+      2) 今日与昨日：对比今天和昨天的支出金额与变化幅度；只有今天支出确实为 0 时才提醒记账，否则不要提记账提醒，也不要写「如果没记账」这类假设。
+      3) 支出结构与预算目标：点出花费最多的 1-2 个分类及占比，说明预算执行率处于安全、接近上限还是超预算，理财目标平均完成度如何，异常支出笔数大于 0 时提醒核对。
+      4) 建议：给出 2 条具体、可执行、贴合本次数据的建议，不要空话套话。
+      硬性要求：只能使用摘要中出现的数字和比例，不得编造金额、日期或分类；上月或昨日缺少可比数据时直接说明，不要推测；不要输出 JSON、表格或标题符号。
+  ai:
+    timeout-ms: 15000
+    max-items: 10
+    force-rule: false
+    model: agnes-3.0-flash
+    api-base: https://api.agnes-ai.cn/v1
+  import:
+    max-rows: 5000

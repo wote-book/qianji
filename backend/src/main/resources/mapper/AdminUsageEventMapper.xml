@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.finance.admin.mapper.UsageEventMapper">
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO usage_event (user_id, module, action, ref_id, ip
+        <if test="createTime != null">, create_time</if>)
+        VALUES (#{userId}, #{module}, #{action}, #{refId}, #{ip}
+        <if test="createTime != null">, #{createTime}</if>)
+    </insert>
+
+    <sql id="conditions">
+        <where>
+            <if test="username != null and username != ''">
+                AND u.username LIKE CONCAT('%', #{username}, '%')
+            </if>
+            <if test="module != null and module != ''">
+                AND e.module = #{module}
+            </if>
+            <if test="start != null">
+                AND e.create_time &gt;= #{start}
+            </if>
+            <if test="end != null">
+                AND e.create_time &lt; DATE_ADD(#{end}, INTERVAL 1 DAY)
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectPage" resultType="com.example.finance.admin.dto.UsageEventVO">
+        SELECT e.id, e.user_id, u.username, e.module, e.action, e.ref_id, e.ip, e.create_time
+        FROM usage_event e
+        LEFT JOIN `user` u ON u.id = e.user_id
+        <include refid="conditions"/>
+        ORDER BY e.id DESC
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <select id="countPage" resultType="long">
+        SELECT COUNT(*)
+        FROM usage_event e
+        LEFT JOIN `user` u ON u.id = e.user_id
+        <include refid="conditions"/>
+    </select>
+</mapper>

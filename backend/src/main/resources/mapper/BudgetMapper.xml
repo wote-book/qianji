@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.finance.budget.mapper.BudgetMapper">
+
+    <resultMap id="BudgetMap" type="com.example.finance.budget.entity.Budget">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="month" column="month"/>
+        <result property="categoryId" column="category_id"/>
+        <result property="limitAmt" column="limit_amt"/>
+        <result property="warnThreshold" column="warn_threshold"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="categoryName" column="category_name"/>
+    </resultMap>
+
+    <select id="selectByMonth" resultMap="BudgetMap">
+        SELECT b.id, b.user_id, b.month, b.category_id, b.limit_amt, b.warn_threshold, b.update_time,
+               CASE WHEN b.category_id = 0 THEN '月度总预算' ELSE c.name END AS category_name
+        FROM budget b
+        LEFT JOIN category c ON c.id = b.category_id AND c.user_id = b.user_id
+        WHERE b.user_id = #{userId} AND b.month = #{month}
+        ORDER BY b.category_id ASC
+    </select>
+
+    <select id="selectByUser" resultMap="BudgetMap">
+        SELECT b.id, b.user_id, b.month, b.category_id, b.limit_amt, b.warn_threshold, b.update_time,
+               CASE WHEN b.category_id = 0 THEN '月度总预算' ELSE c.name END AS category_name
+        FROM budget b
+        LEFT JOIN category c ON c.id = b.category_id AND c.user_id = b.user_id
+        WHERE b.user_id = #{userId}
+        ORDER BY b.month DESC, b.category_id ASC
+    </select>
+
+    <select id="selectByIdAndUser" resultMap="BudgetMap">
+        SELECT id, user_id, month, category_id, limit_amt, warn_threshold, update_time
+        FROM budget
+        WHERE id = #{id} AND user_id = #{userId}
+    </select>
+
+    <select id="selectByMonthAndCategory" resultMap="BudgetMap">
+        SELECT id, user_id, month, category_id, limit_amt, warn_threshold, update_time
+        FROM budget
+        WHERE user_id = #{userId} AND month = #{month} AND category_id = #{categoryId}
+    </select>
+
+    <insert id="upsert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO budget (user_id, month, category_id, limit_amt, warn_threshold)
+        VALUES (#{userId}, #{month}, #{categoryId}, #{limitAmt}, #{warnThreshold})
+        ON DUPLICATE KEY UPDATE
+            limit_amt = VALUES(limit_amt),
+            warn_threshold = VALUES(warn_threshold)
+    </insert>
+
+    <delete id="delete">
+        DELETE FROM budget WHERE id = #{id} AND user_id = #{userId}
+    </delete>
+</mapper>

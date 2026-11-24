@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.finance.admin.mapper.AdminStatsMapper">
+
+    <select id="countUsersByStatus" resultType="long">
+        SELECT COUNT(*) FROM `user`
+        WHERE role = 'USER'
+        <if test="status != null">AND status = #{status}</if>
+    </select>
+
+    <select id="countTodayActiveUsers" resultType="long">
+        SELECT COUNT(DISTINCT user_id) FROM (
+            SELECT user_id FROM usage_event WHERE create_time &gt;= CURDATE()
+            UNION ALL
+            SELECT user_id FROM login_log
+            WHERE success = 1 AND user_id IS NOT NULL AND create_time &gt;= CURDATE()
+        ) t
+    </select>
+
+    <select id="countNewUsersSince" resultType="long">
+        SELECT COUNT(*) FROM `user`
+        WHERE role = 'USER' AND create_time &gt;= #{start}
+    </select>
+
+    <select id="countRecordsSince" resultType="long">
+        SELECT COUNT(*) FROM `record` WHERE record_date &gt;= #{start}
+    </select>
+
+    <select id="countEventsSince" resultType="long">
+        SELECT COUNT(*) FROM usage_event
+        WHERE create_time &gt;= #{start}
+        <if test="module != null and module != ''">AND module = #{module}</if>
+    </select>
+
+    <select id="countActiveUsersSince" resultType="long">
+        SELECT COUNT(DISTINCT user_id) FROM (
+            SELECT user_id FROM usage_event WHERE create_time &gt;= #{start}
+            UNION ALL
+            SELECT user_id FROM login_log
+            WHERE success = 1 AND user_id IS NOT NULL AND create_time &gt;= #{start}
+        ) t
+    </select>
+
+    <select id="selectDailyActive" resultType="com.example.finance.admin.dto.DailyCount">
+        SELECT DATE(create_time) AS `date`, COUNT(DISTINCT user_id) AS `value`
+        FROM (
+            SELECT user_id, create_time FROM usage_event WHERE create_time &gt;= #{start}
+            UNION ALL
+            SELECT user_id, create_time FROM login_log
+            WHERE success = 1 AND user_id IS NOT NULL AND create_time &gt;= #{start}
+        ) t
+        WHERE create_time &lt; DATE_ADD(#{end}, INTERVAL 1 DAY)
+        GROUP BY DATE(create_time)
+    </select>
+
+    <select id="selectDailyNewUsers" resultType="com.example.finance.admin.dto.DailyCount">
+        SELECT DATE(create_time) AS `date`, COUNT(*) AS `value`
+        FROM `user`
+        WHERE role = 'USER'
+          AND create_time &gt;= #{start}
+          AND create_time &lt; DATE_ADD(#{end}, INTERVAL 1 DAY)
+        GROUP BY DATE(create_time)
+    </select>
+
+    <select id="selectModuleUsage" resultType="com.example.finance.admin.dto.ModuleUsage">
+        SELECT module, COUNT(DISTINCT user_id) AS users, COUNT(*) AS events
+        FROM usage_event
+        WHERE create_time &gt;= #{start}
+        GROUP BY module
+        ORDER BY events DESC
+    </select>
+
+    <select id="selectActiveUserDayRows" resultType="com.example.finance.admin.dto.ActiveUserDay">
+        SELECT user_id, DATE(create_time) AS day
+        FROM (
+            SELECT user_id, create_time FROM usage_event WHERE create_time &gt;= #{start}
+            UNION
+            SELECT user_id, create_time FROM login_log
+            WHERE success = 1 AND user_id IS NOT NULL AND create_time &gt;= #{start}
+        ) t
+    </select>
+
+    <select id="selectUserActivity" resultType="com.example.finance.admin.dto.UserActivity">
+        SELECT u.id AS user_id,
+               u.create_time,
+               MAX(a.day) AS last_active_day,
+               COUNT(DISTINCT CASE WHEN a.day &gt;= DATE_SUB(CURDATE(), INTERVAL 6 DAY) THEN a.day END) AS days7
+        FROM `user` u
+        LEFT JOIN (SELECT user_id, DATE(create_time) AS day FROM usage_event) a ON a.user_id = u.id
+        WHERE u.role = 'USER'
+        GROUP BY u.id, u.create_time
+    </select>
+
+    <select id="selectRetention" resultType="com.example.finance.admin.dto.RetentionRaw">
+        WITH cohorts AS (
+            SELECT id, DATE(create_time) AS cohort
+            FROM `user`
+            WHERE role = 'USER' AND create_time &gt;= #{start}
+        ),
+        flags AS (
+            SELECT c.id,
+                   c.cohort,
+                   MAX(CASE WHEN DATE(a.create_time) = DATE_ADD(c.cohort, INTERVAL 1 DAY) THEN 1 ELSE 0 END) AS d1,
+                   MAX(CASE WHEN DATE(a.create_time) = DATE_ADD(c.cohort, INTERVAL 7 DAY) THEN 1 ELSE 0 END) AS d7,
+                   MAX(CASE WHEN DATE(a.create_time) = DATE_ADD(c.cohort, INTERVAL 30 DAY) THEN 1 ELSE 0 END) AS d30
+            FROM cohorts c
+            LEFT JOIN usage_event a ON a.user_id = c.id
+                AND a.create_time &gt;= c.cohort
+                AND a.create_time &lt; DATE_ADD(c.cohort, INTERVAL 31 DAY)
+            GROUP BY c.id, c.cohort
+        )
+        SELECT cohort AS cohort_date, COUNT(*) AS size, SUM(d1) AS d1, SUM(d7) AS d7, SUM(d30) AS d30
+        FROM flags
+        GROUP BY cohort
+        ORDER BY cohort DESC
+    </select>
+
+    <sql id="userRowSelect">
+        WITH activity AS (
+            SELECT user_id, DATE(create_time) AS day FROM usage_event
+        )
+        SELECT u.id, u.username, u.nickname, u.role, u.status, u.create_time,
+               u.last_login_time, u.last_login_ip,
+               (SELECT COUNT(*) FROM `record` r WHERE r.user_id = u.id) AS record_count,
+               (SELECT COUNT(DISTINCT a.day) FROM activity a
+                WHERE a.user_id = u.id AND a.day &gt;= DATE_SUB(CURDATE(), INTERVAL 29 DAY)) AS active_days_30
+        FROM `user` u
+    </sql>
+
+    <sql id="userWhere">
+        <where>
+            <if test="q.keyword != null and q.keyword != ''">
+                AND (u.username LIKE CONCAT('%', #{q.keyword}, '%')
+                     OR u.nickname LIKE CONCAT('%', #{q.keyword}, '%'))
+            </if>
+            <if test="q.status != null">
+                AND u.status = #{q.status}
+            </if>
+            <if test="q.role != null and q.role != ''">
+                AND u.role = #{q.role}
+            </if>
+            <if test="q.start != null">
+                AND u.create_time &gt;= #{q.start}
+            </if>
+            <if test="q.end != null">
+                AND u.create_time &lt; DATE_ADD(#{q.end}, INTERVAL 1 DAY)
+            </if>
+            <if test="q.segment == 'HIGH'">
+                AND (SELECT COUNT(DISTINCT DATE(x.create_time)) FROM usage_event x
+                     WHERE x.user_id = u.id AND x.create_time &gt;= DATE_SUB(CURDATE(), INTERVAL 6 DAY)) &gt;= 5
+            </if>
+            <if test="q.segment == 'NORMAL'">
+                AND EXISTS (SELECT 1 FROM usage_event x
+                            WHERE x.user_id = u.id AND x.create_time &gt;= DATE_SUB(CURDATE(), INTERVAL 14 DAY))
+                AND (SELECT COUNT(DISTINCT DATE(x.create_time)) FROM usage_event x
+                     WHERE x.user_id = u.id AND x.create_time &gt;= DATE_SUB(CURDATE(), INTERVAL 6 DAY)) &lt; 5
+            </if>
+            <if test="q.segment == 'DORMANT'">
+                AND EXISTS (SELECT 1 FROM usage_event x WHERE x.user_id = u.id)
+                AND NOT EXISTS (SELECT 1 FROM usage_event x
+                                WHERE x.user_id = u.id AND x.create_time &gt;= DATE_SUB(CURDATE(), INTERVAL 14 DAY))
+            </if>
+            <if test="q.segment == 'INACTIVE'">
+                AND NOT EXISTS (SELECT 1 FROM usage_event x WHERE x.user_id = u.id)
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectUserPage" resultType="com.example.finance.admin.dto.UserRowVO">
+        <include refid="userRowSelect"/>
+        <include refid="userWhere"/>
+        ORDER BY u.id DESC
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <select id="countUserPage" resultType="long">
+        SELECT COUNT(*) FROM `user` u
+        <include refid="userWhere"/>
+    </select>
+
+    <select id="selectUserExport" resultType="com.example.finance.admin.dto.UserRowVO">
+        <include refid="userRowSelect"/>
+        <include refid="userWhere"/>
+        ORDER BY u.id ASC
+    </select>
+
+    <select id="selectUserDetail" resultType="com.example.finance.admin.dto.UserDetailVO">
+        SELECT u.id, u.username, u.nickname, u.role, u.status, u.create_time,
+               DATEDIFF(CURDATE(), DATE(u.create_time)) AS register_days,
+               u.last_login_time, u.last_login_ip,
+               (SELECT COUNT(*) FROM account x WHERE x.user_id = u.id) AS account_count,
+               (SELECT COUNT(*) FROM `record` x WHERE x.user_id = u.id) AS record_count,
+               (SELECT COUNT(*) FROM category x WHERE x.user_id = u.id) AS category_count,
+               (SELECT COUNT(*) FROM budget x WHERE x.user_id = u.id) AS budget_count,
+               (SELECT COUNT(*) FROM goal x WHERE x.user_id = u.id) AS goal_count,
+               (SELECT COUNT(*) FROM usage_event x WHERE x.user_id = u.id AND x.module = 'BRIEF') AS brief_count,
+               (SELECT COUNT(DISTINCT DATE(x.create_time)) FROM usage_event x
+                WHERE x.user_id = u.id AND x.create_time &gt;= DATE_SUB(CURDATE(), INTERVAL 29 DAY)) AS active_days_30,
+               (SELECT x.module FROM usage_event x WHERE x.user_id = u.id
+                ORDER BY x.create_time DESC LIMIT 1) AS last_module
+        FROM `user` u
+        WHERE u.id = #{id}
+    </select>
+</mapper>

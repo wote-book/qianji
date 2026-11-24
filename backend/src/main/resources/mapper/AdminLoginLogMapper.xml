@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.finance.admin.mapper.LoginLogMapper">
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO login_log (user_id, username, ip, user_agent, success
+        <if test="createTime != null">, create_time</if>)
+        VALUES (#{userId}, #{username}, #{ip}, #{userAgent}, #{success}
+        <if test="createTime != null">, #{createTime}</if>)
+    </insert>
+
+    <sql id="conditions">
+        <where>
+            <if test="username != null and username != ''">
+                AND username LIKE CONCAT('%', #{username}, '%')
+            </if>
+            <if test="success != null">
+                AND success = #{success}
+            </if>
+            <if test="start != null">
+                AND create_time &gt;= #{start}
+            </if>
+            <if test="end != null">
+                AND create_time &lt; DATE_ADD(#{end}, INTERVAL 1 DAY)
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectPage" resultType="com.example.finance.admin.dto.LoginLogVO">
+        SELECT id, user_id, username, ip, user_agent, success, create_time
+        FROM login_log
+        <include refid="conditions"/>
+        ORDER BY id DESC
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <select id="countPage" resultType="long">
+        SELECT COUNT(*) FROM login_log
+        <include refid="conditions"/>
+    </select>
+
+    <select id="selectRecent" resultType="com.example.finance.admin.dto.LoginLogVO">
+        SELECT id, user_id, username, ip, user_agent, success, create_time
+        FROM login_log
+        ORDER BY id DESC
+        LIMIT #{limit}
+    </select>
+</mapper>

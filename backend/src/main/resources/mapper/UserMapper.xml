@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.finance.user.mapper.UserMapper">
+
+    <resultMap id="UserMap" type="com.example.finance.user.entity.User">
+        <id property="id" column="id"/>
+        <result property="username" column="username"/>
+        <result property="password" column="password"/>
+        <result property="nickname" column="nickname"/>
+        <result property="role" column="role"/>
+        <result property="status" column="status"/>
+        <result property="securityQuestion" column="security_question"/>
+        <result property="securityAnswer" column="security_answer"/>
+        <result property="lastLoginTime" column="last_login_time"/>
+        <result property="lastLoginIp" column="last_login_ip"/>
+        <result property="createTime" column="create_time"/>
+    </resultMap>
+
+    <sql id="cols">
+        id, username, password, nickname, role, status,
+        security_question, security_answer, last_login_time, last_login_ip, create_time
+    </sql>
+
+    <select id="selectByUsername" resultMap="UserMap">
+        SELECT <include refid="cols"/>
+        FROM `user`
+        WHERE username = #{username}
+    </select>
+
+    <select id="selectById" resultMap="UserMap">
+        SELECT <include refid="cols"/>
+        FROM `user`
+        WHERE id = #{id}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO `user` (username, password, nickname, role, status, security_question, security_answer)
+        VALUES (#{username}, #{password}, #{nickname}, #{role}, #{status}, #{securityQuestion}, #{securityAnswer})
+    </insert>
+
+    <update id="updateProfile">
+        UPDATE `user` SET nickname = #{nickname} WHERE id = #{id}
+    </update>
+
+    <update id="updatePassword">
+        UPDATE `user` SET password = #{password} WHERE id = #{id}
+    </update>
+
+    <update id="updateSecurity">
+        UPDATE `user`
+        SET security_question = #{question}, security_answer = #{answer}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateStatus">
+        UPDATE `user` SET status = #{status} WHERE id = #{id}
+    </update>
+
+    <update id="updateLastLogin">
+        UPDATE `user` SET last_login_time = #{lastLoginTime}, last_login_ip = #{lastLoginIp} WHERE id = #{id}
+    </update>
+
+    <update id="updateCreateTime">
+        UPDATE `user` SET create_time = #{createTime} WHERE id = #{id}
+    </update>
+
+    <select id="selectStatusById" resultType="java.lang.Integer">
+        SELECT status FROM `user` WHERE id = #{id}
+    </select>
+</mapper>

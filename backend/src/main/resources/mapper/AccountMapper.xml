@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.finance.account.mapper.AccountMapper">
+
+    <resultMap id="AccountMap" type="com.example.finance.account.entity.Account">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="accName" column="acc_name"/>
+        <result property="type" column="type"/>
+        <result property="initBalance" column="init_balance"/>
+        <result property="balance" column="balance"/>
+        <result property="allowOverdraft" column="allow_overdraft"/>
+        <result property="createTime" column="create_time"/>
+    </resultMap>
+
+    <select id="selectByUserId" resultMap="AccountMap">
+        SELECT id, user_id, acc_name, type, init_balance, balance, allow_overdraft, create_time
+        FROM account
+        WHERE user_id = #{userId}
+        ORDER BY id ASC
+    </select>
+
+    <select id="selectByIdAndUser" resultMap="AccountMap">
+        SELECT id, user_id, acc_name, type, init_balance, balance, allow_overdraft, create_time
+        FROM account
+        WHERE id = #{id} AND user_id = #{userId}
+    </select>
+
+    <select id="selectByName" resultMap="AccountMap">
+        SELECT id, user_id, acc_name, type, init_balance, balance, allow_overdraft, create_time
+        FROM account
+        WHERE user_id = #{userId} AND acc_name = #{accName}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO account (user_id, acc_name, type, init_balance, balance, allow_overdraft)
+        VALUES (#{userId}, #{accName}, #{type}, #{initBalance}, #{balance}, #{allowOverdraft})
+    </insert>
+
+    <update id="updateBasic">
+        UPDATE account
+        SET acc_name = #{accName}, type = #{type}, allow_overdraft = #{allowOverdraft}
+        WHERE id = #{id} AND user_id = #{userId}
+    </update>
+
+    <delete id="delete">
+        DELETE FROM account WHERE id = #{id} AND user_id = #{userId}
+    </delete>
+
+    <update id="updateBalanceRaw">
+        UPDATE account
+        SET balance = balance + #{delta}
+        WHERE id = #{accountId} AND user_id = #{userId}
+    </update>
+
+    <update id="updateBalanceIfEnough">
+        UPDATE account
+        SET balance = balance + #{delta}
+        WHERE id = #{accountId} AND user_id = #{userId}
+          AND (allow_overdraft = 1 OR balance + #{delta} >= 0)
+    </update>
+
+    <update id="updateBalanceTo">
+        UPDATE account
+        SET balance = #{balance}
+        WHERE id = #{accountId} AND user_id = #{userId}
+    </update>
+
+    <select id="selectDiffs" resultType="com.example.finance.account.dto.AccountDiff">
+        SELECT a.id,
+               a.acc_name AS accName,
+               a.init_balance AS initBalance,
+               a.balance,
+               a.init_balance + COALESCE(SUM(CASE r.type WHEN 'INCOME' THEN r.amount ELSE -r.amount END), 0) AS calc,
+               a.balance - (a.init_balance + COALESCE(SUM(CASE r.type WHEN 'INCOME' THEN r.amount ELSE -r.amount END), 0)) AS diff
+        FROM account a
+        LEFT JOIN `record` r ON r.account_id = a.id AND r.user_id = a.user_id
+        WHERE a.user_id = #{userId}
+        GROUP BY a.id, a.acc_name, a.init_balance, a.balance
+        ORDER BY a.id ASC
+    </select>
+
+    <select id="sumBalance" resultType="java.math.BigDecimal">
+        SELECT COALESCE(SUM(balance), 0) FROM account WHERE user_id = #{userId}
+    </select>
+</mapper>

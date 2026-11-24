@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.finance.record.mapper.RecordMapper">
+
+    <resultMap id="RecordMap" type="com.example.finance.record.entity.Record">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="accountId" column="account_id"/>
+        <result property="categoryId" column="category_id"/>
+        <result property="amount" column="amount"/>
+        <result property="type" column="type"/>
+        <result property="recordDate" column="record_date"/>
+        <result property="remark" column="remark"/>
+        <result property="source" column="source"/>
+        <result property="dedupKey" column="dedup_key"/>
+        <result property="createTime" column="create_time"/>
+        <result property="accountName" column="account_name"/>
+        <result property="categoryName" column="category_name"/>
+    </resultMap>
+
+    <sql id="baseCols">
+        r.id, r.user_id, r.account_id, r.category_id, r.amount, r.type, r.record_date,
+        r.remark, r.source, r.dedup_key, r.create_time,
+        a.acc_name AS account_name, c.name AS category_name
+    </sql>
+
+    <sql id="fromWhere">
+        FROM `record` r
+        LEFT JOIN account a ON a.id = r.account_id
+        LEFT JOIN category c ON c.id = r.category_id
+        WHERE r.user_id = #{userId}
+    </sql>
+
+    <sql id="conditions">
+        <if test="q.start != null">AND r.record_date &gt;= #{q.start}</if>
+        <if test="q.end != null">AND r.record_date &lt;= #{q.end}</if>
+        <if test="q.type != null and q.type != ''">AND r.type = #{q.type}</if>
+        <if test="q.categoryId != null">AND r.category_id = #{q.categoryId}</if>
+        <if test="q.accountId != null">AND r.account_id = #{q.accountId}</if>
+        <if test="q.source != null and q.source != ''">AND r.source = #{q.source}</if>
+        <if test="q.keyword != null and q.keyword != ''">
+            AND r.remark LIKE CONCAT('%', #{q.keyword}, '%')
+        </if>
+    </sql>
+
+    <select id="selectPage" resultMap="RecordMap">
+        SELECT <include refid="baseCols"/>
+        <include refid="fromWhere"/>
+        <include refid="conditions"/>
+        ORDER BY r.record_date DESC, r.id DESC
+        LIMIT #{q.limit} OFFSET #{q.offset}
+    </select>
+
+    <select id="selectForExport" resultMap="RecordMap">
+        SELECT <include refid="baseCols"/>
+        <include refid="fromWhere"/>
+        <include refid="conditions"/>
+        ORDER BY r.record_date ASC, r.id ASC
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*)
+        FROM `record` r
+        WHERE r.user_id = #{userId}
+        <include refid="conditions"/>
+    </select>
+
+    <select id="selectByIdAndUser" resultMap="RecordMap">
+        SELECT <include refid="baseCols"/>
+        FROM `record` r
+        LEFT JOIN account a ON a.id = r.account_id
+        LEFT JOIN category c ON c.id = r.category_id
+        WHERE r.id = #{id} AND r.user_id = #{userId}
+    </select>
+
+    <select id="selectByDedupKey" resultMap="RecordMap">
+        SELECT id, user_id, account_id, category_id, amount, type, record_date, remark, source, dedup_key, create_time
+        FROM `record`
+        WHERE user_id = #{userId} AND dedup_key = #{dedupKey}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO `record` (user_id, account_id, category_id, amount, type, record_date, remark, source, dedup_key)
+        VALUES (#{userId}, #{accountId}, #{categoryId}, #{amount}, #{type}, #{recordDate}, #{remark}, #{source}, #{dedupKey})
+    </insert>
+
+    <update id="update">
+        UPDATE `record`
+        SET account_id = #{accountId}, category_id = #{categoryId}, amount = #{amount},
+            type = #{type}, record_date = #{recordDate}, remark = #{remark}
+        WHERE id = #{id} AND user_id = #{userId}
+    </update>
+
+    <delete id="delete">
+        DELETE FROM `record` WHERE id = #{id} AND user_id = #{userId}
+    </delete>
+
+    <select id="countByAccount" resultType="int">
+        SELECT COUNT(*) FROM `record` WHERE user_id = #{userId} AND account_id = #{accountId}
+    </select>
+
+    <select id="countByCategory" resultType="int">
+        SELECT COUNT(*) FROM `record` WHERE user_id = #{userId} AND category_id = #{categoryId}
+    </select>
+
+    <select id="countByUser" resultType="long">
+        SELECT COUNT(*) FROM `record` WHERE user_id = #{userId}
+    </select>
+
+    <select id="sumByRange" resultType="java.util.LinkedHashMap">
+        SELECT COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) AS income,
+               COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) AS expense,
+               COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE -amount END), 0) AS net
+        FROM `record`
+        WHERE user_id = #{userId} AND record_date BETWEEN #{start} AND #{end}
+    </select>
+
+    <select id="sumExpenseByCategory" resultType="java.util.LinkedHashMap">
+        SELECT r.category_id AS categoryId,
+               COALESCE(c.name, '未分类') AS categoryName,
+               SUM(r.amount) AS amount
+        FROM `record` r
+        LEFT JOIN category c ON c.id = r.category_id
+        WHERE r.user_id = #{userId} AND r.type = 'EXPENSE'
+          AND r.record_date BETWEEN #{start} AND #{end}
+        GROUP BY r.category_id, c.name
+        ORDER BY amount DESC
+    </select>
+
+    <select id="sumByCategory" resultType="java.util.LinkedHashMap">
+        SELECT r.category_id AS categoryId,
+               COALESCE(c.name, '未分类') AS categoryName,
+               SUM(r.amount) AS amount
+        FROM `record` r
+        LEFT JOIN category c ON c.id = r.category_id
+        WHERE r.user_id = #{userId} AND r.type = #{type}
+          AND r.record_date BETWEEN #{start} AND #{end}
+        GROUP BY r.category_id, c.name
+        ORDER BY amount DESC
+    </select>
+
+    <select id="trendByDay" resultType="java.util.LinkedHashMap">
+        SELECT DATE_FORMAT(record_date, '%Y-%m-%d') AS day,
+               COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) AS income,
+               COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) AS expense
+        FROM `record`
+        WHERE user_id = #{userId} AND record_date BETWEEN #{start} AND #{end}
+        GROUP BY DATE_FORMAT(record_date, '%Y-%m-%d')
+        ORDER BY day ASC
+    </select>
+
+    <select id="trendByMonth" resultType="java.util.LinkedHashMap">
+        SELECT DATE_FORMAT(record_date, '%Y-%m') AS month,
+               COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) AS income,
+               COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) AS expense
+        FROM `record`
+        WHERE user_id = #{userId} AND record_date BETWEEN #{start} AND #{end}
+        GROUP BY DATE_FORMAT(record_date, '%Y-%m')
+        ORDER BY month ASC
+    </select>
+
+    <select id="selectBetween" resultMap="RecordMap">
+        SELECT <include refid="baseCols"/>
+        FROM `record` r
+        LEFT JOIN account a ON a.id = r.account_id
+        LEFT JOIN category c ON c.id = r.category_id
+        WHERE r.user_id = #{userId} AND r.record_date BETWEEN #{start} AND #{end}
+        ORDER BY r.record_date ASC, r.id ASC
+    </select>
+
+    <select id="selectRecent" resultMap="RecordMap">
+        SELECT <include refid="baseCols"/>
+        FROM `record` r
+        LEFT JOIN account a ON a.id = r.account_id
+        LEFT JOIN category c ON c.id = r.category_id
+        WHERE r.user_id = #{userId}
+        ORDER BY r.record_date DESC, r.id DESC
+        LIMIT #{limit}
+    </select>
+</mapper>
